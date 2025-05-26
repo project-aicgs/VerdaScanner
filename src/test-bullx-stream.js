@@ -1,4 +1,4 @@
-import msgpack from 'msgpack-lite';
+import * as msgpack from 'msgpack-lite';
 import pako from 'pako';
 import { addToken, updateMarketCap } from '../src/utils/leaderboardStore.js';
 
