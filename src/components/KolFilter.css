@@ -1,0 +1,197 @@
+.kol-filter-container {
+    position: relative;
+    display: inline-block;
+    margin: 1rem;
+  }
+  
+  .kol-filter-button {
+    background: linear-gradient(90deg, #4ea1d3 60%, #ffb86b 100%);
+    border: 2px solid #4ef0c7;
+    color: #23272f;
+    padding: 0.75rem 1.5rem;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 8px #4ea1d355;
+  }
+  
+  .kol-filter-button:hover {
+    background: linear-gradient(90deg, #ffb86b 0%, #4ea1d3 100%);
+    color: #23272f;
+    box-shadow: 0 0 12px #ffb86b99;
+  }
+  
+  .dropdown-arrow {
+    transition: transform 0.3s ease;
+    font-size: 0.8rem;
+    margin-left: auto;
+    color: #4ef0c7;
+  }
+  
+  .dropdown-arrow.open {
+    transform: rotate(180deg);
+  }
+  
+  .kol-filter-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, #23272f 0%, #2c313a 60%, #4ea1d3 100%);
+    border: 2px solid #4ef0c7;
+    border-radius: 10px;
+    box-shadow: 0 0 12px #4ea1d355;
+    z-index: 1000;
+    min-width: 280px;
+    max-height: 400px;
+    overflow-y: auto;
+    animation: dropdownSlide 0.3s ease-out;
+  }
+  
+  @keyframes dropdownSlide {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .kol-filter-header {
+    padding: 1rem;
+    border-bottom: 1.5px solid #4ef0c7;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: linear-gradient(90deg, #4ea1d3 60%, #ffb86b 100%);
+  }
+  
+  .kol-filter-header span {
+    color: #23272f;
+    font-weight: bold;
+    font-size: 0.9rem;
+  }
+  
+  .select-all-btn {
+    background: transparent;
+    border: 1.5px solid #4ef0c7;
+    color: #23272f;
+    padding: 0.3rem 0.6rem;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: all 0.2s ease;
+  }
+  
+  .select-all-btn:hover {
+    background: #4ef0c7;
+    color: #23272f;
+  }
+  
+  .kol-list {
+    padding: 0.5rem;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+  
+  .kol-checkbox-item {
+    display: flex;
+    align-items: center;
+    padding: 0.6rem 0.8rem;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    margin-bottom: 0.2rem;
+    color: #f4f4f4;
+  }
+  
+  .kol-checkbox-item:hover {
+    background: rgba(78,161,211,0.10);
+    color: #23272f;
+  }
+  
+  .kol-checkbox-item input[type="checkbox"] {
+    display: none;
+  }
+  
+  .checkbox-custom {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #4ea1d3;
+    border-radius: 4px;
+    margin-right: 0.8rem;
+    position: relative;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    background: #23272f;
+  }
+  
+  .kol-checkbox-item input[type="checkbox"]:checked + .checkbox-custom {
+    background: #4ef0c7;
+    border-color: #4ea1d3;
+    box-shadow: 0 0 8px #4ef0c755;
+  }
+  
+  .kol-checkbox-item input[type="checkbox"]:checked + .checkbox-custom::after {
+    content: "✓";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #23272f;
+    font-weight: bold;
+    font-size: 12px;
+  }
+  
+  .kol-name {
+    color: #4ea1d3;
+    font-weight: 500;
+    font-size: 0.9rem;
+    user-select: none;
+    flex-grow: 1;
+    text-shadow: none;
+  }
+  
+  .kol-checkbox-item input[type="checkbox"]:not(:checked) + .checkbox-custom + .kol-name {
+    color: #ffb86b;
+    text-decoration: line-through;
+  }
+  
+  /* Custom scrollbar for dropdown */
+  .kol-list::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  .kol-list::-webkit-scrollbar-track {
+    background: #2c313a;
+    border-radius: 3px;
+  }
+  
+  .kol-list::-webkit-scrollbar-thumb {
+    background: #4ea1d3;
+    border-radius: 3px;
+  }
+  
+  .kol-list::-webkit-scrollbar-thumb:hover {
+    background: #ffb86b;
+  }
+  
+  /* Responsive adjustments */
+  @media (max-width: 768px) {
+    .kol-filter-dropdown {
+      min-width: 250px;
+      max-height: 300px;
+    }
+    
+    .kol-filter-button {
+      padding: 0.6rem 1.2rem;
+      font-size: 0.9rem;
+    }
+  }
