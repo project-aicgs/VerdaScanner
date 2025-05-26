@@ -1,4 +1,4 @@
-import * as msgpack from 'msgpack-lite';
+import { decode as msgpackDecode } from '@msgpack/msgpack';
 import pako from 'pako';
 import { addToken, updateMarketCap } from '../src/utils/leaderboardStore.js';
 
@@ -59,7 +59,7 @@ function decodeData(data) {
     if (data && typeof data === 'object' && data.type === "Buffer" && Array.isArray(data.data)) {
       const uint8Array = new Uint8Array(data.data);
       try {
-        return msgpack.decode(uint8Array);
+        return msgpackDecode(uint8Array); // Use msgpackDecode here
       } catch (e) {
         return new TextDecoder().decode(uint8Array);
       }
