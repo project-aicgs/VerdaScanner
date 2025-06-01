@@ -17,6 +17,45 @@ const KOL_WALLETS = [
   "9CDiPtpPF2xB1VRsR13NeULzuU3X7xirfbqhZWmKcPqJ",
 ];
 
+// Enhanced market cap validation function
+const validateMarketCap = (solAmount, tokenAmount, solPrice) => {
+  const sol = Number(solAmount);
+  const tokens = Number(tokenAmount);
+  const price = Number(solPrice);
+  
+  // Validate all inputs
+  if (isNaN(sol) || isNaN(tokens) || isNaN(price) || tokens <= 0 || sol <= 0) {
+    console.warn('🚨 Invalid trade data:', { solAmount, tokenAmount, solPrice });
+    return null;
+  }
+  
+  const pricePerToken = sol / tokens;
+  const marketCap = pricePerToken * 1_000_000_000 * price;
+  
+  // Debug logging for suspiciously high prices
+  if (pricePerToken > 1) {
+    console.log('🔍 High price detected:', {
+      solAmount,
+      tokenAmount,
+      pricePerToken: pricePerToken.toFixed(8),
+      marketCapUSD: marketCap.toLocaleString()
+    });
+  }
+  
+  // Reject impossible market caps (>$50B is unrealistic for new tokens)
+  if (marketCap > 50_000_000_000) {
+    console.warn('🚨 Rejected phantom market cap:', {
+      sol, 
+      tokens, 
+      pricePerToken: pricePerToken.toFixed(8), 
+      marketCap: marketCap.toLocaleString()
+    });
+    return null;
+  }
+  
+  return marketCap;
+};
+
 export default function setupPumpWebSocket(onMint, onTrade, onKolBuy, solPrice) {
   const ws = new WebSocket("wss://pumpportal.fun/api/data");
 
@@ -30,15 +69,41 @@ export default function setupPumpWebSocket(onMint, onTrade, onKolBuy, solPrice) 
     try {
       const data = JSON.parse(event.data);
 
+      // 🚀 LOG ALL INCOMING TRANSACTION DATA
+      if (data.txType === "create" || data.txType === "buy" || data.txType === "sell") {
+        console.log('📦 [PumpFun Transaction]', {
+          txType: data.txType,
+          mint: data.mint,
+          traderPublicKey: data.traderPublicKey,
+          solAmount: data.solAmount,
+          tokenAmount: data.tokenAmount,
+          marketCapSol: data.marketCapSol, // 👈 This is the field you mentioned!
+          bondingCurveKey: data.bondingCurveKey,
+          vTokensInBondingCurve: data.vTokensInBondingCurve,
+          vSolInBondingCurve: data.vSolInBondingCurve,
+          marketCapUSD: data.marketCapSol ? data.marketCapSol * solPrice : null,
+          timestamp: new Date().toISOString(),
+          // Log ALL fields to see what else is available
+          allFields: Object.keys(data)
+        });
+      }
+
       if (data.txType === "create" && data.mint) {
         onMint(data);
         ws.send(JSON.stringify({ method: "subscribeTokenTrade", keys: [data.mint] }));
       }
 
       if ((data.txType === "buy" || data.txType === "sell") && data.solAmount && data.tokenAmount) {
+        // Use validated market cap calculation
+        const marketCapUSD = validateMarketCap(data.solAmount, data.tokenAmount, solPrice);
+        
+        // Skip this trade if market cap is invalid
+        if (marketCapUSD === null) {
+          console.warn('🚨 Skipping trade with invalid market cap');
+          return;
+        }
+        
         const volumeUSD = Number(data.solAmount) * solPrice;
-        const pricePerToken = Number(data.solAmount) / Number(data.tokenAmount);
-        const marketCapUSD = pricePerToken * 1_000_000_000 * solPrice;
 
         onTrade({
           mint: data.mint,
@@ -46,7 +111,7 @@ export default function setupPumpWebSocket(onMint, onTrade, onKolBuy, solPrice) 
           txType: data.txType,
           tokenAmount: data.tokenAmount,
           volumeUSD,
-          marketCapUSD,
+          marketCapUSD, // Now validated
         });
 
         if (KOL_WALLETS.includes(data.traderPublicKey) && data.txType === "buy") {

@@ -1,62 +1,34 @@
-.kol-filter-container {
-    position: relative;
-    display: inline-block;
-    margin: 1rem;
-  }
-  
-  .kol-filter-button {
-    background: linear-gradient(90deg, #4ea1d3 60%, #ffb86b 100%);
-    border: 2px solid #4ef0c7;
-    color: #23272f;
-    padding: 0.75rem 1.5rem;
-    border-radius: 10px;
-    cursor: pointer;
-    font-weight: bold;
-    font-size: 1rem;
+.kol-filter-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(35, 39, 47, 0.8);
+    backdrop-filter: blur(4px);
     display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    transition: all 0.3s ease;
-    box-shadow: 0 0 8px #4ea1d355;
-  }
-  
-  .kol-filter-button:hover {
-    background: linear-gradient(90deg, #ffb86b 0%, #4ea1d3 100%);
-    color: #23272f;
-    box-shadow: 0 0 12px #ffb86b99;
-  }
-  
-  .dropdown-arrow {
-    transition: transform 0.3s ease;
-    font-size: 0.8rem;
-    margin-left: auto;
-    color: #4ef0c7;
-  }
-  
-  .dropdown-arrow.open {
-    transform: rotate(180deg);
+    align-items: flex-start;
+    justify-content: center;
+    z-index: 1000;
+    padding-top: 120px;
   }
   
   .kol-filter-dropdown {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
     background: linear-gradient(135deg, #23272f 0%, #2c313a 60%, #4ea1d3 100%);
     border: 2px solid #4ef0c7;
     border-radius: 10px;
     box-shadow: 0 0 12px #4ea1d355;
-    z-index: 1000;
-    min-width: 280px;
-    max-height: 400px;
-    overflow-y: auto;
+    min-width: 320px;
+    max-width: 400px;
+    max-height: 500px;
+    overflow: hidden;
     animation: dropdownSlide 0.3s ease-out;
   }
   
   @keyframes dropdownSlide {
     from {
       opacity: 0;
-      transform: translateY(-10px);
+      transform: translateY(-20px);
     }
     to {
       opacity: 1;
@@ -97,7 +69,7 @@
   
   .kol-list {
     padding: 0.5rem;
-    max-height: 300px;
+    max-height: 400px;
     overflow-y: auto;
   }
   
@@ -185,13 +157,13 @@
   
   /* Responsive adjustments */
   @media (max-width: 768px) {
-    .kol-filter-dropdown {
-      min-width: 250px;
-      max-height: 300px;
+    .kol-filter-overlay {
+      padding-top: 140px;
     }
     
-    .kol-filter-button {
-      padding: 0.6rem 1.2rem;
-      font-size: 0.9rem;
+    .kol-filter-dropdown {
+      min-width: 280px;
+      max-width: 320px;
+      max-height: 400px;
     }
   }

@@ -139,7 +139,7 @@ export default function Leaderboard({ onClose }) {
       
       <div className="leaderboard-modal" onClick={(e) => e.stopPropagation()}>
         <div className="leaderboard-header">
-          <h2>🏆 Peak Market Cap Leaderboard</h2>
+          <h2>🏆 Top 50 Gainers Leaderboard</h2>
           <button className="close-btn" onClick={onClose}>✖</button>
         </div>
         
@@ -157,7 +157,7 @@ export default function Leaderboard({ onClose }) {
             <span className="stat-value">{formatMarketCap(stats.topPeakMC || 0)}</span>
           </div>
           <div className="stat-item">
-            <span className="stat-label">BullX:</span>
+            <span className="stat-label">KOL Tracker:</span>
             <span className="stat-value">{stats.bullXCount || 0}</span>
           </div>
           <div className="stat-item">

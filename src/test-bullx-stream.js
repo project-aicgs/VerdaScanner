@@ -153,17 +153,6 @@ function displayAnalysis(contractAddress) {
   const priceUSD = transaction.suspectedBaseTokenPriceUSD;
   const marketCap = actualSupply && priceUSD ? actualSupply * parseFloat(priceUSD) : null;
   
-  console.log('🔍 BullX Market Cap Calculation Debug:', {
-    contractAddress,
-    symbol: token.symbol,
-    totalSupply: token.totalSupply,
-    decimals: token.decimals,
-    actualSupply: actualSupply,
-    priceUSD: priceUSD,
-    calculatedMarketCap: marketCap,
-    rawPriceUSD: transaction.suspectedBaseTokenPriceUSD
-  });
-  
   const tokensPurchased = parseFloat(transaction.amountOut) / Math.pow(10, token.decimals);
   const usdSpent = parseFloat(transaction.amountUSD);
   const ownershipPercentage = actualSupply ? (tokensPurchased / actualSupply) * 100 : null;
@@ -196,13 +185,6 @@ function displayAnalysis(contractAddress) {
     kolTokensData.set(contractAddress, kolTokenData);
   }
 
-  // NEW: Add to central leaderboard store
-  console.log('🎯 Adding BullX token to leaderboard:', {
-    contractAddress,
-    symbol: token.symbol,
-    marketCap: marketCap,
-    kolName: transaction.kolName
-  });
   
   try {
     addToken({
@@ -217,7 +199,6 @@ function displayAnalysis(contractAddress) {
       kols: [transaction.kolName || "UNKNOWN"]
     }, 'bullx');
     
-    console.log('✅ BullX token added successfully to leaderboard');
   } catch (error) {
     console.error('❌ Error adding BullX token to leaderboard:', error);
   }
@@ -513,21 +494,14 @@ export function stopBullXMonitoring() {
 
 // DEBUG: Function to check BullX processing
 export function debugBullX() {
-  console.log('=== BULLX DEBUG INFO ===');
-  console.log('Is monitoring:', isMonitoring);
-  console.log('Wallet WS connected:', walletWs?.readyState === WebSocket.OPEN);
-  console.log('Token WS connected:', tokenWs?.readyState === WebSocket.OPEN);
-  console.log('Subscribed tokens count:', subscribedTokens.size);
-  console.log('Token data count:', tokenData.size);
-  console.log('Transaction data count:', transactionData.size);
-  console.log('KOL tokens data count:', kolTokensData.size);
+
   
-  console.log('Recent KOL tokens:');
+
   Array.from(kolTokensData.values()).slice(0, 3).forEach(token => {
-    console.log(`  ${token.symbol} - ${token.kols.join(', ')}`);
+
   });
   
-  console.log('========================');
+
 }
 
 export { KOL_NAMES };

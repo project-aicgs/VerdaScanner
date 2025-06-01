@@ -4,8 +4,9 @@ import TokenModal from "../components/TokenModal";
 import ToastNotification from "../components/ToastNotification";
 import KolFilter from "../components/KolFilter";
 import Leaderboard from "../components/Leaderboard";
+import SessionStats from "../components/SessionStats";
 import { formatMarketCap, formatVolume } from "../utils/formatUtils";
-import { addToken, debugStore } from "../utils/leaderboardStore";
+import { addToken, debugStore, updateMarketCap } from "../utils/leaderboardStore";
 import * as BullX from "../test-bullx-stream";
 
 const MAX_SUPPLY = 1_000_000_000;
@@ -22,9 +23,13 @@ function fixIpfsUrl(url) {
 function shouldShowPumpFunToken(token) {
   const volume = token.volumeUSD || 0;
   const dev = token.devPercent || 0;
+  const marketCap = token.marketCapUSD || 0;
   
   // Must have volume > 0 first
   if (volume <= 0) return false;
+  
+  // Must have market cap >= 7k to be called
+  if (marketCap < 7000) return false;
   
   // Then apply the complex filter logic
   return (volume >= 12500 && dev <= 15) || (volume >= 7500 && dev <= 7);
@@ -52,6 +57,9 @@ export default function Dashboard() {
   const [toast, setToast] = useState("");
   const [excludedKols, setExcludedKols] = useState([]);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [showKolFilter, setShowKolFilter] = useState(false);
+  const [showSessionStats, setShowSessionStats] = useState(false);
+  const [sessionStartTime] = useState(new Date()); // Track when session started
 
   useEffect(() => {
     fetch("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd")
@@ -74,7 +82,6 @@ export default function Dashboard() {
 
     // Debug: Check leaderboard store every 10 seconds
     const debugInterval = setInterval(() => {
-      console.log('🐛 Debug check - calling debugStore()');
       debugStore();
       
       // Also debug BullX
@@ -107,11 +114,14 @@ export default function Dashboard() {
           uri: token.uri,
           image: fixIpfsUrl(metadata.image) || "",
           description: metadata.description || "",
+          website: metadata.website || "",
+          twitter: metadata.twitter || "",
           devPublicKey: token.traderPublicKey,
           initialBuy: token.initialBuy,
           devPercent: (token.initialBuy / MAX_SUPPLY) * 100,
           volumeUSD: 0,
           marketCapUSD: 0,
+          wasSuccessfullyLaunched: false,  // Track if token has been "called"
         };
 
         // Add to tokens array
@@ -134,9 +144,9 @@ export default function Dashboard() {
               marketCapUSD: trade.marketCapUSD,
             };
 
-            // NEW: Add to leaderboard store if it passes filters
-            if (shouldShowPumpFunToken(updatedToken)) {
-              console.log('Adding PumpFun token to leaderboard:', updatedToken.symbol);
+            // First time qualification check
+            if (!t.wasSuccessfullyLaunched && shouldShowPumpFunToken(updatedToken)) {
+              updatedToken.wasSuccessfullyLaunched = true;
               addToken({
                 contractAddress: t.mint,
                 symbol: updatedToken.symbol,
@@ -146,10 +156,35 @@ export default function Dashboard() {
                 marketCapUSD: trade.marketCapUSD,
                 volumeUSD: updatedToken.volumeUSD,
                 devPercent: updatedToken.devPercent,
-                initialMarketCap: trade.marketCapUSD, // Use first trade as initial
+                initialMarketCap: trade.marketCapUSD, // Use first qualifying trade as initial
                 peakMarketCap: trade.marketCapUSD,
                 currentMarketCap: trade.marketCapUSD
               }, 'pumpfun');
+            }
+
+            // Update market cap for all subsequent trades (if token was already launched)
+            if (t.wasSuccessfullyLaunched) {
+              // Get previous market cap for comparison
+              const previousMC = t.marketCapUSD || 0;
+              const newMC = trade.marketCapUSD;
+              
+              // Calculate gain from previous to current trade
+              if (previousMC > 0) {
+                const instantGain = ((newMC - previousMC) / previousMC) * 100;
+                
+                // Filter out impossible single-trade gains (>1000% or <-90%)
+                if (Math.abs(instantGain) > 1000) {
+                  console.warn('🚨 Filtered phantom gain:', {
+                    symbol: updatedToken.symbol,
+                    previousMC: previousMC.toLocaleString(),
+                    newMC: newMC.toLocaleString(),
+                    gain: instantGain.toFixed(1) + '%'
+                  });
+                  return updatedToken; // Skip this update, return token with old market cap
+                }
+              }
+              
+              updateMarketCap(t.mint, trade.marketCapUSD);
             }
 
             return updatedToken;
@@ -157,7 +192,7 @@ export default function Dashboard() {
         );
       },
       async (kolTx) => {
-        // This is handled by BullX now, so can be empty or removed later
+        // Keep this empty function to maintain parameter order
       },
       solPrice
     );
@@ -216,27 +251,54 @@ export default function Dashboard() {
     return acc;
   }, []);
 
-  // Apply PumpFun filters
-  const filteredTokens = tokens.filter(shouldShowPumpFunToken);
+  // Apply PumpFun filters - show only launched tokens
+  const filteredTokens = tokens.filter(token => token.wasSuccessfullyLaunched);
 
   return (
     <>
       {toast && <ToastNotification message={toast} />}
 
-      <div className="controls">
-        <KolFilter 
-          excludedKols={excludedKols} 
-          onKolToggle={handleKolToggle} 
-        />
-        <button 
-          className="leaderboard-btn"
-          onClick={() => setShowLeaderboard(true)}
-        >
-          🏆 Leaderboard
-        </button>
+      {/* New Header with Logo and Controls */}
+      <div className="app-header">
+        <div className="logo-container">
+          <img src="/verdalogo.png" alt="Verda" className="logo" />
+          <div className="brand-name">Verda</div>
+        </div>
+        
+        <div className="header-controls">
+          <button 
+            className="header-btn"
+            onClick={() => setShowKolFilter(!showKolFilter)}
+          >
+            KOL Filter ({excludedKols.length > 0 ? `${15 - excludedKols.length}/15` : '15/15'})
+          </button>
+          <button 
+            className="header-btn"
+            onClick={() => setShowSessionStats(true)}
+          >
+            Win Rate
+          </button>
+          <button 
+            className="header-btn"
+            onClick={() => setShowLeaderboard(true)}
+          >
+            Leaderboard
+          </button>
+        </div>
       </div>
 
-      <h2 className="section-label">📡 KOL Scanner</h2>
+      {/* KOL Filter Dropdown */}
+      {showKolFilter && (
+        <div style={{ position: 'relative', zIndex: 1000 }}>
+          <KolFilter 
+            excludedKols={excludedKols} 
+            onKolToggle={handleKolToggle}
+            onClose={() => setShowKolFilter(false)}
+          />
+        </div>
+      )}
+
+      <h2 className="section-label">KOL Scanner</h2>
       <div className="tile-container">
         {deduplicatedKolTokens.map(t => (
           <div className="token-tile kol-alert" key={t.mint} onClick={() => openModal(t)}>
@@ -268,7 +330,7 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <h2 className="section-label">📈 All Tokens</h2>
+      <h2 className="section-label">All Tokens</h2>
       <div className="tile-container">
         {filteredTokens.map(t => (
           <div className="token-tile" key={t.mint} onClick={() => openModal(t)}>
@@ -292,7 +354,33 @@ export default function Dashboard() {
             />}
             <div className="symbol">{t.symbol}</div>
             <div className="name">{t.name}</div>
-            <div className="description">{t.description}</div>
+            
+            {/* Updated socials section */}
+            <div className="socials">
+              {t.website && (
+                <a 
+                  href={t.website.startsWith('http') ? t.website : `https://${t.website}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="social-link"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  🌐 Website
+                </a>
+              )}
+              {t.twitter && (
+                <a 
+                  href={t.twitter.startsWith('http') ? t.twitter : `https://x.com/${t.twitter.replace('@', '')}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="social-link"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  🐦 Twitter
+                </a>
+              )}
+            </div>
+            
             <div className="dev-percent">Dev Holdings: {t.devPercent.toFixed(2)}%</div>
             <div className="volume">Volume: {formatVolume(t.volumeUSD)}</div>
             <div className="marketcap">Market Cap: {formatMarketCap(t.marketCapUSD)}</div>
@@ -311,6 +399,13 @@ export default function Dashboard() {
       {showLeaderboard && (
         <Leaderboard 
           onClose={() => setShowLeaderboard(false)}
+        />
+      )}
+
+      {showSessionStats && (
+        <SessionStats 
+          onClose={() => setShowSessionStats(false)}
+          sessionStartTime={sessionStartTime}
         />
       )}
     </>

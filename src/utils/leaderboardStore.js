@@ -89,7 +89,7 @@ export function addToken(rawToken, source) {
     // Add new token
     const standardized = standardizeToken(rawToken, source);
     centralLeaderboard.set(contractAddress, standardized);
-    console.log(`✨ New token added: ${standardized.symbol} (${source})`);
+
   }
 }
 
@@ -104,7 +104,7 @@ export function updateMarketCap(contractAddress, newMarketCap) {
   // Update peak if new value is higher
   if (newMarketCap > existing.peakMarketCap) {
     existing.peakMarketCap = newMarketCap;
-    console.log(`📈 Peak MC updated for ${existing.symbol}: ${newMarketCap}`);
+
   }
   
   existing.currentMarketCap = newMarketCap;
@@ -114,7 +114,7 @@ export function updateMarketCap(contractAddress, newMarketCap) {
 // Get all tokens for leaderboard display
 export function getAllTokens() {
   const tokens = Array.from(centralLeaderboard.values());
-  console.log(`📊 Leaderboard retrieved: ${tokens.length} tokens`);
+
   return tokens;
 }
 
@@ -138,11 +138,8 @@ export function getStats() {
 
 // Debug function to check store state
 export function debugStore() {
-  console.log('=== LEADERBOARD STORE DEBUG ===');
-  console.log('Total tokens:', centralLeaderboard.size);
   
   const stats = getStats();
-  console.log('Stats:', stats);
   
   // Check for duplicates by symbol
   const symbolCount = {};
@@ -158,7 +155,6 @@ export function debugStore() {
   if (duplicates.length > 0) {
     console.log('⚠️ Duplicate symbols:', duplicates);
   } else {
-    console.log('✅ No duplicate symbols found');
   }
   
   // Show top 5 by peak MC
@@ -166,16 +162,16 @@ export function debugStore() {
     .sort((a, b) => b.peakMarketCap - a.peakMarketCap)
     .slice(0, 5);
   
-  console.log('Top 5 by peak MC:');
+
   top5.forEach((token, i) => {
     console.log(`  ${i + 1}. ${token.symbol} - $${token.peakMarketCap.toLocaleString()} (${token.source})`);
   });
   
-  console.log('================================');
+
 }
 
 // Clear all data (for testing)
 export function clearStore() {
   centralLeaderboard.clear();
-  console.log('🗑️ Leaderboard store cleared');
+
 }
