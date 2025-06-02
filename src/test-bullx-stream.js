@@ -25,7 +25,7 @@ const KOL_NAMES = {
   "CRVidEDtEUTYZisCxBZkpELzhQc9eauMLR3FWg74tReL": "FRANKDEGODS",
   "Fdv3EQykFyxFpDf6SFB9TuaWdVFtmZeav3hrhrvQzZbM": "TOLY WALLET",
   "6nhskL8RVpXzWXC7mcC1UXpe3ze2p6P6og1jXVGUW88s": "PATTY ICE",
-  "DfMxre4cKmvogbLrPigxmibVTTQDuzjdXojWsX3Q6WfTTnki9pJwzMh": "EURIS",
+  "DfMxre4cKmvogbLrPigxmibVTTQDuzjdXojWzjCXXhzj": "EURIS",
   "5rkPDK4JnVAumgzeV2Zu8vjggMTtHdDtrsd5o9dhGZHD": "DAVE PORTNOY",
   "FXzJ6xwH2HfdKshERVAYiLh79PAUw9zC7ucngupt91ap": "DAVE PORTNOY",
 };
