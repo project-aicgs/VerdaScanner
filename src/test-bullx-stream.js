@@ -1,6 +1,6 @@
 import { decode as msgpackDecode } from '@msgpack/msgpack';
 import pako from 'pako';
-import { addToken, updateMarketCap } from '../src/utils/leaderboardStore.js';
+import { addToken, updateMarketCap, getToken } from '../src/utils/leaderboardStore.js';
 
 // Two different WebSocket URLs
 const WALLET_WS_URL = 'wss://stream4.bullx.io/app/prowess-frail-sensitive?protocol=7&client=js&version=8.4.0-rc2&flash=false';
@@ -52,6 +52,29 @@ let tokenPingInterval = null;
 let healthCheckInterval = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
+
+// MARKET CAP VALIDATION - Enhanced with better limits
+const MAX_REALISTIC_MARKET_CAP = 10_000_000_000; // $10B max for new tokens
+const MIN_REALISTIC_MARKET_CAP = 1000; // $1K minimum
+
+function validateMarketCap(marketCap) {
+  if (!marketCap || isNaN(marketCap) || !isFinite(marketCap)) {
+    console.warn('Invalid market cap value:', marketCap);
+    return null;
+  }
+  
+  if (marketCap > MAX_REALISTIC_MARKET_CAP) {
+    console.warn(`Market cap ${marketCap} exceeds realistic maximum of $${MAX_REALISTIC_MARKET_CAP.toLocaleString()}`);
+    return null;
+  }
+  
+  if (marketCap < MIN_REALISTIC_MARKET_CAP) {
+    console.warn(`Market cap ${marketCap} below realistic minimum of $${MIN_REALISTIC_MARKET_CAP}`);
+    return null;
+  }
+  
+  return marketCap;
+}
 
 // Function to decode data (browser compatible)
 function decodeData(data) {
@@ -129,7 +152,17 @@ function formatMarketCapSimple(value) {
 // Function to calculate actual supply
 function calculateActualSupply(totalSupply, decimals) {
   if (!totalSupply || decimals === undefined) return null;
-  return parseFloat(totalSupply) / Math.pow(10, decimals);
+  
+  // Ensure we're working with valid numbers
+  const supply = parseFloat(totalSupply);
+  const dec = parseInt(decimals);
+  
+  if (isNaN(supply) || isNaN(dec)) {
+    console.warn('Invalid supply or decimals:', { totalSupply, decimals });
+    return null;
+  }
+  
+  return supply / Math.pow(10, dec);
 }
 
 // Function to fix IPFS URLs
@@ -140,7 +173,7 @@ function fixIpfsUrl(url) {
   return `https://ipfs.io/ipfs/${ipfsHash}`;
 }
 
-// SIMPLIFIED: Function to display formatted analysis AND add to leaderboard store
+// FIXED: Function to display formatted analysis AND add to leaderboard store
 function displayAnalysis(contractAddress) {
   const token = tokenData.get(contractAddress);
   const transaction = transactionData.get(contractAddress);
@@ -151,7 +184,23 @@ function displayAnalysis(contractAddress) {
   
   const actualSupply = calculateActualSupply(token.totalSupply, token.decimals);
   const priceUSD = transaction.suspectedBaseTokenPriceUSD;
-  const marketCap = actualSupply && priceUSD ? actualSupply * parseFloat(priceUSD) : null;
+  
+  // Calculate and validate market cap
+  let marketCap = null;
+  if (actualSupply && priceUSD) {
+    const calculatedMC = actualSupply * parseFloat(priceUSD);
+    marketCap = validateMarketCap(calculatedMC);
+    
+    if (!marketCap) {
+      console.error(`Rejected invalid market cap for ${token.symbol}:`, {
+        actualSupply,
+        priceUSD,
+        calculatedMC,
+        decimals: token.decimals
+      });
+      return; // Don't add tokens with invalid market caps
+    }
+  }
   
   const tokensPurchased = parseFloat(transaction.amountOut) / Math.pow(10, token.decimals);
   const usdSpent = parseFloat(transaction.amountUSD);
@@ -185,19 +234,38 @@ function displayAnalysis(contractAddress) {
     kolTokensData.set(contractAddress, kolTokenData);
   }
 
+  console.log(`✅ BullX Token Analysis Complete:`, {
+    symbol: token.symbol,
+    marketCap: formatMarketCapSimple(marketCap),
+    priceUSD: priceUSD,
+    actualSupply: actualSupply,
+    decimals: token.decimals
+  });
   
   try {
-    addToken({
-      contractAddress: contractAddress,
-      symbol: token.symbol || "???",
-      name: token.name || "Unnamed",
-      image: token.logo,
-      description: token.description || "",
-      initialMarketCap: marketCap || 0,
-      peakMarketCap: marketCap || 0,
-      currentMarketCap: marketCap || 0,
-      kols: [transaction.kolName || "UNKNOWN"]
-    }, 'bullx');
+    // Check if token already exists in store before adding
+    const existingInStore = getToken(contractAddress);
+    
+    if (!existingInStore) {
+      addToken({
+        contractAddress: contractAddress,
+        symbol: token.symbol || "???",
+        name: token.name || "Unnamed",
+        image: token.logo,
+        description: token.description || "",
+        initialMarketCap: marketCap || 0,
+        peakMarketCap: marketCap || 0,
+        currentMarketCap: marketCap || 0,
+        kols: [transaction.kolName || "UNKNOWN"]
+      }, 'bullx');
+      
+      console.log(`✅ Added BullX token to leaderboard: ${token.symbol}`);
+    } else {
+      // Update existing token with new KOL if needed
+      if (transaction.kolName && !existingInStore.kols.includes(transaction.kolName)) {
+        existingInStore.kols.push(transaction.kolName);
+      }
+    }
     
   } catch (error) {
     console.error('❌ Error adding BullX token to leaderboard:', error);
@@ -262,6 +330,7 @@ function createWebSocketConnections() {
 
   // WALLET WEBSOCKET
   walletWs.onopen = () => {
+    console.log('✅ BullX Wallet WebSocket connected');
     reconnectAttempts = 0;
     resubscribeWallets();
 
@@ -301,6 +370,7 @@ function createWebSocketConnections() {
   };
 
   walletWs.onclose = (event) => {
+    console.warn('❌ BullX Wallet WebSocket disconnected');
     if (isMonitoring && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
       reconnectAttempts++;
       setTimeout(() => {
@@ -315,6 +385,7 @@ function createWebSocketConnections() {
 
   // TOKEN WEBSOCKET
   tokenWs.onopen = () => {
+    console.log('✅ BullX Token WebSocket connected');
     resubscribeTokens();
 
     tokenPingInterval = setInterval(() => {
@@ -366,13 +437,28 @@ function createWebSocketConnections() {
           
           if (livePriceUSD && tokenData.has(contractAddress)) {
             const tokenInfo = tokenData.get(contractAddress);
-            if (tokenInfo) {
+            
+            // FIXED: Check if token exists in leaderboard store first
+            const tokenInStore = getToken(contractAddress);
+            
+            if (tokenInfo && tokenInStore) {
               const actualSupply = calculateActualSupply(tokenInfo.totalSupply, tokenInfo.decimals);
               
               if (actualSupply) {
-                const currentMarketCap = actualSupply * parseFloat(livePriceUSD);
-                // NEW: Update market cap in leaderboard store
-                updateMarketCap(contractAddress, currentMarketCap);
+                const calculatedMC = actualSupply * parseFloat(livePriceUSD);
+                const validatedMC = validateMarketCap(calculatedMC);
+                
+                if (validatedMC) {
+                  // Only update if the new market cap is valid
+                  updateMarketCap(contractAddress, validatedMC);
+                  console.log(`📊 Updated ${tokenInfo.symbol} MC: ${formatMarketCapSimple(validatedMC)}`);
+                } else {
+                  console.warn(`🚨 Rejected live MC update for ${tokenInfo.symbol}:`, {
+                    livePriceUSD,
+                    actualSupply,
+                    calculatedMC
+                  });
+                }
               }
             }
           }
@@ -404,8 +490,14 @@ function createWebSocketConnections() {
               const priceUSD = transaction.suspectedBaseTokenPriceUSD || tokenDataDecoded.priceUSD;
               
               if (actualSupply && priceUSD) {
-                const currentMarketCap = actualSupply * parseFloat(priceUSD);
-                updateMarketCap(contractAddress, currentMarketCap);
+                const calculatedMC = actualSupply * parseFloat(priceUSD);
+                const validatedMC = validateMarketCap(calculatedMC);
+                
+                // FIXED: Check if token exists before updating
+                const tokenInStore = getToken(contractAddress);
+                if (validatedMC && tokenInStore) {
+                  updateMarketCap(contractAddress, validatedMC);
+                }
               }
             }
             
@@ -420,7 +512,7 @@ function createWebSocketConnections() {
   };
 
   tokenWs.onclose = (event) => {
-    // Silent
+    console.warn('❌ BullX Token WebSocket disconnected');
   };
 
   tokenWs.onerror = (err) => {
@@ -434,6 +526,7 @@ function createWebSocketConnections() {
       const tokenAlive = tokenWs && tokenWs.readyState === WebSocket.OPEN;
       
       if (!walletAlive || !tokenAlive) {
+        console.log('🔄 Reconnecting BullX WebSockets...');
         createWebSocketConnections();
       }
     }
@@ -445,6 +538,7 @@ function createWebSocketConnections() {
 export function startBullXMonitoring() {
   if (isMonitoring) return;
   
+  console.log('🚀 Starting BullX monitoring...');
   isMonitoring = true;
   reconnectAttempts = 0;
   createWebSocketConnections();
@@ -476,6 +570,7 @@ export function getConnectionHealth() {
 }
 
 export function stopBullXMonitoring() {
+  console.log('🛑 Stopping BullX monitoring...');
   isMonitoring = false;
   reconnectAttempts = 0;
   
@@ -494,14 +589,23 @@ export function stopBullXMonitoring() {
 
 // DEBUG: Function to check BullX processing
 export function debugBullX() {
-
-  
+  console.log('🔍 BullX Debug Info:', {
+    monitoring: isMonitoring,
+    walletConnected: walletWs?.readyState === WebSocket.OPEN,
+    tokenConnected: tokenWs?.readyState === WebSocket.OPEN,
+    subscribedTokens: subscribedTokens.size,
+    trackedKolTokens: kolTokensData.size,
+    tokenDataSize: tokenData.size,
+    transactionDataSize: transactionData.size
+  });
 
   Array.from(kolTokensData.values()).slice(0, 3).forEach(token => {
-
+    console.log(`Token: ${token.symbol}`, {
+      marketCap: formatMarketCapSimple(token.marketCapUSD),
+      supply: token.supply,
+      price: token.priceUSD
+    });
   });
-  
-
 }
 
 export { KOL_NAMES };
