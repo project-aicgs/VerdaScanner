@@ -491,6 +491,8 @@ export async function resolveBestPoolForOhlcv(mint, options = {}) {
   const aggregate = options.aggregate ?? 1;
   const limit = options.limit ?? 200;
   const forceRefresh = options.forceRefresh === true;
+  /** Tighter “last candle age” when re-resolving pools so a dead bonding pool loses to PumpSwap faster. */
+  const probeStaleOpts = forceRefresh ? { maxAgeSec: 90 } : {};
 
   const addresses = await getPoolAddressList(mint, { forceRefresh });
   if (!addresses.length) return null;
@@ -511,7 +513,7 @@ export async function resolveBestPoolForOhlcv(mint, options = {}) {
     if (!fallbackPool) fallbackPool = pool;
     const key = `${pool}|${aggregate}|${limit}`;
     setCached(ohlcvCache, key, bars, OHLCV_TTL_MS);
-    if (!ohlcvBarsLookStale(bars, aggregate)) {
+    if (!ohlcvBarsLookStale(bars, aggregate, probeStaleOpts)) {
       chartLog("using pool idx", i, pool.slice(0, 8) + "…", "fresh OHLCV");
       return pool;
     }

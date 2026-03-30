@@ -24,6 +24,12 @@ const metadataProxy = {
     secure: true,
     rewrite: (path) => path.replace(/^\/__md-rapidlaunch/, ''),
   },
+  '/__md-drilled': {
+    target: 'https://drilled.live',
+    changeOrigin: true,
+    secure: true,
+    rewrite: (path) => path.replace(/^\/__md-drilled/, ''),
+  },
 }
 
 export default defineConfig(({ mode }) => {

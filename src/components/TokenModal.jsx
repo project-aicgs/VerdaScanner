@@ -72,7 +72,13 @@ function scannerLivePriceUsd(t) {
   return null;
 }
 
-export default function TokenModal({ token, onClose, onCopy, kolBuyBreakdown = [] }) {
+export default function TokenModal({
+  token,
+  onClose,
+  onCopy,
+  kolBuyBreakdown = [],
+  onChartMigrationSync,
+}) {
   const [utcTime, setUtcTime] = useState(formatUtcClock);
   const [zoomImage, setZoomImage] = useState(null);
 
@@ -266,6 +272,7 @@ export default function TokenModal({ token, onClose, onCopy, kolBuyBreakdown = [
               mint={mint}
               livePriceUsd={scannerLivePriceUsd(token)}
               marketCapSol={token.marketCapSol ?? null}
+              onMigrationSync={onChartMigrationSync}
             />
 
             {kolBuyBreakdown.length > 0 && (

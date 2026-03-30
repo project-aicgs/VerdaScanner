@@ -30,3 +30,9 @@
   to = "https://metadata.rapidlaunch.io/:splat"
   status = 200
   force = true
+
+[[redirects]]
+  from = "/__md-drilled/*"
+  to = "https://drilled.live/:splat"
+  status = 200
+  force = true

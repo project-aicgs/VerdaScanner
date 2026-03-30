@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import setupPumpWebSocket from "../utils/wsClient";
 import TokenModal from "../components/TokenModal";
 import ToastNotification from "../components/ToastNotification";
@@ -67,6 +67,7 @@ function normalizeIpfsUri(uri) {
 const METADATA_PROXY_PREFIX = {
   "metadata.j7tracker.com": "/__md-j7",
   "metadata.rapidlaunch.io": "/__md-rapidlaunch",
+  "drilled.live": "/__md-drilled",
 };
 
 function metadataFetchUrl(uri) {
@@ -594,6 +595,7 @@ export default function Dashboard() {
         <TokenModal
           token={modalTokenLive}
           kolBuyBreakdown={kolBuyBreakdown}
+          onChartMigrationSync={handleChartMigrationSync}
           onClose={() => setModalToken(null)}
           onCopy={(addr) => {
             navigator.clipboard.writeText(addr);

@@ -6,8 +6,29 @@
 
 export const PUMP_BONDING_TARGET_SOL = 85;
 
-/** Above this SOL-notional we poll Gecko pool resolution aggressively (fast migration). */
+/** Above this SOL-notional we poll Gecko pool resolution aggressively (bonding + post-migration). */
 export const PUMP_BONDING_AGGRESSIVE_REFRESH_SOL = 60;
+
+/**
+ * Stable key for chart bootstrap: remount when the token likely graduation / venue change so pool discovery runs again.
+ * @param {number|null|undefined} marketCapSol
+ */
+export function chartPoolResolutionEpoch(marketCapSol) {
+  if (marketCapSol != null && Number.isFinite(marketCapSol)) {
+    return marketCapSol >= PUMP_BONDING_TARGET_SOL ? "post-bonding" : "bonding";
+  }
+  return "unknown";
+}
+
+/**
+ * Bonding-graduation / PumpSwap window: chart poll should force fresh pool list + MC resync every tick (~10s).
+ */
+export function inMigrationChartSyncWindow(marketCapSol) {
+  return (
+    shouldAggressivelyRefreshChartPools(marketCapSol) ||
+    chartPoolResolutionEpoch(marketCapSol) === "post-bonding"
+  );
+}
 
 /**
  * @param {number|null|undefined} marketCapSol — from PumpPortal trades (`marketCapSol`)
@@ -20,11 +41,12 @@ export function bondingCurvePercentFromMarketCapSol(marketCapSol) {
   return Math.min(100, Math.max(0, (marketCapSol / PUMP_BONDING_TARGET_SOL) * 100));
 }
 
-/** True while still on-curve and close enough to graduation that pool migration is imminent. */
+/**
+ * True when we should hit Gecko often for a fresh pool list + tight OHLCV freshness.
+ * Includes late bonding *and* post-graduation SOL readouts (PumpPortal can report >85 or later drop marketCapSol);
+ * a high upper bound was incorrectly turning off refresh right when PumpSwap migration mattered most.
+ */
 export function shouldAggressivelyRefreshChartPools(marketCapSol) {
   if (marketCapSol == null || !Number.isFinite(marketCapSol)) return false;
-  return (
-    marketCapSol >= PUMP_BONDING_AGGRESSIVE_REFRESH_SOL &&
-    marketCapSol < PUMP_BONDING_TARGET_SOL + 12
-  );
+  return marketCapSol >= PUMP_BONDING_AGGRESSIVE_REFRESH_SOL;
 }

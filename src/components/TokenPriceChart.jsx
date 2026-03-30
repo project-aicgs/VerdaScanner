@@ -8,7 +8,11 @@ import {
   ohlcvBarsLookStale,
 } from "../services/geckoTerminal";
 import { formatChartUsdAxis } from "../utils/formatUtils";
-import { shouldAggressivelyRefreshChartPools } from "../utils/pumpBonding";
+import {
+  chartPoolResolutionEpoch,
+  inMigrationChartSyncWindow,
+  shouldAggressivelyRefreshChartPools,
+} from "../utils/pumpBonding";
 import "./TokenPriceChart.css";
 
 /** 1m bars — closer to Gecko “live” view than 5m aggregates. */
@@ -54,14 +58,21 @@ function formatChartError(e) {
   }
 }
 
-export default function TokenPriceChart({ mint, livePriceUsd = null, marketCapSol = null }) {
+export default function TokenPriceChart({
+  mint,
+  livePriceUsd = null,
+  marketCapSol = null,
+  onMigrationSync,
+}) {
   const chartHostRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
   const poolRef = useRef(null);
   const lastBarsRef = useRef([]);
   const livePriceRef = useRef(null);
+  const onMigrationSyncRef = useRef(onMigrationSync);
   const marketCapSolRef = useRef(marketCapSol);
+  onMigrationSyncRef.current = onMigrationSync;
   const roRef = useRef(null);
   livePriceRef.current = livePriceUsd;
   marketCapSolRef.current = marketCapSol;
@@ -102,7 +113,7 @@ export default function TokenPriceChart({ mint, livePriceUsd = null, marketCapSo
         const pool = await fetchBestPoolAddress(mint, {
           aggregate: CHART_AGGREGATE,
           limit: CHART_LIMIT,
-          forceRefresh: shouldAggressivelyRefreshChartPools(marketCapSol),
+          forceRefresh: inMigrationChartSyncWindow(marketCapSol),
         });
         if (cancelled) return;
         if (!pool) {
@@ -204,8 +215,20 @@ export default function TokenPriceChart({ mint, livePriceUsd = null, marketCapSo
           }, 28_000);
           (async () => {
             try {
+              const migrationWindow = inMigrationChartSyncWindow(marketCapSolRef.current);
               const aggressive = shouldAggressivelyRefreshChartPools(marketCapSolRef.current);
-              const staleOpts = aggressive ? { maxAgeSec: 75 } : {};
+              const staleOpts = migrationWindow || aggressive ? { maxAgeSec: 75 } : {};
+
+              /** Every OHLCV_POLL_MS (~10s): force fresh pool ranking while bonding / post-migrate. */
+              if (migrationWindow) {
+                const newPool = await fetchBestPoolAddress(mint, {
+                  aggregate: CHART_AGGREGATE,
+                  limit: CHART_LIMIT,
+                  forceRefresh: true,
+                });
+                if (cancelled || !seriesRef.current) return;
+                if (newPool) poolRef.current = newPool;
+              }
 
               let fresh = await fetchMinuteOhlcv(poolRef.current, {
                 aggregate: CHART_AGGREGATE,
@@ -215,8 +238,8 @@ export default function TokenPriceChart({ mint, livePriceUsd = null, marketCapSo
               if (cancelled || !seriesRef.current) return;
 
               if (
-                fresh.length === 0 ||
-                ohlcvBarsLookStale(fresh, CHART_AGGREGATE, staleOpts)
+                !migrationWindow &&
+                (fresh.length === 0 || ohlcvBarsLookStale(fresh, CHART_AGGREGATE, staleOpts))
               ) {
                 if (CHART_DEBUG) {
                   console.log(
@@ -246,6 +269,13 @@ export default function TokenPriceChart({ mint, livePriceUsd = null, marketCapSo
                 s.setData(fresh);
                 lastBarsRef.current = snap;
                 mergeLiveIntoLastBar(s, lastBarsRef.current, livePriceRef.current);
+                if (migrationWindow) {
+                  try {
+                    onMigrationSyncRef.current?.();
+                  } catch (err) {
+                    console.error("[VerdaChart] onMigrationSync failed", err);
+                  }
+                }
               }
             } catch (e) {
               console.error("[VerdaChart] OHLCV poll failed", e);
@@ -313,7 +343,7 @@ export default function TokenPriceChart({ mint, livePriceUsd = null, marketCapSo
         chartRef.current = null;
       }
     };
-  }, [mint]);
+  }, [mint, chartPoolResolutionEpoch(marketCapSol)]);
 
   /** Nudge the last candle toward scanner price / implied MC so the chart tracks your “Live” header. */
   useEffect(() => {
