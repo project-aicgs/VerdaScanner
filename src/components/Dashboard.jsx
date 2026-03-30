@@ -401,6 +401,43 @@ export default function Dashboard() {
     filteredMintSnapshotRef.current = current;
   }, [filteredTokens]);
 
+  /**
+   * Bonding / PumpSwap window: chart polls ~10s with forced pool refresh; refresh BullX + pump row
+   * so modal MC/price stay aligned with Gecko.
+   */
+  const handleChartMigrationSync = useCallback(() => {
+    const mint = modalToken?.mint;
+    setKolTokens(BullX.getKolTokens());
+    if (!mint) return;
+    const row = BullX.getTokenData(mint);
+    if (!row) return;
+    setTokens((prev) => {
+      const i = prev.findIndex((t) => t.mint === mint);
+      if (i === -1) return prev;
+      const cur = prev[i];
+      const merged = {
+        ...cur,
+        marketCapUSD: row.marketCapUSD ?? cur.marketCapUSD,
+        priceUSD: row.priceUSD ?? cur.priceUSD,
+        supply: row.supply ?? cur.supply,
+        website: row.website ?? cur.website,
+        twitter: row.twitter ?? cur.twitter,
+        image: row.image || cur.image,
+        description: row.description ?? cur.description,
+      };
+      if (
+        merged.marketCapUSD === cur.marketCapUSD &&
+        merged.priceUSD === cur.priceUSD &&
+        merged.supply === cur.supply
+      ) {
+        return prev;
+      }
+      const next = [...prev];
+      next[i] = merged;
+      return next;
+    });
+  }, [modalToken?.mint]);
+
   /** Modal was opened with a snapshot; merge stream updates so MC/price/chart stay live. */
   const modalTokenLive = useMemo(() => {
     if (!modalToken?.mint) return null;
