@@ -1,23 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import "./KolFilter.css";
-
-const ALL_KOLS = [
-  "BATMANWIF",
-  "TEST ADDY", 
-  "ERIK STEPHENS",
-  "ANSEM",
-  "MARCEL",
-  "BASTILLE",
-  "TRADERPOW",
-  "MITCH",
-  "XANDER",
-  "BIG DAN",
-  "FRANKDEGODS",
-  "TOLY WALLET",
-  "PATTY ICE",
-  "EURIS",
-  "DAVE PORTNOY"
-];
+import { ALL_KOL_NAMES as ALL_KOLS } from "../constants/kolWallets.js";
 
 export default function KolFilter({ excludedKols, onKolToggle, onClose }) {
   const dropdownRef = useRef(null);
@@ -44,7 +27,7 @@ export default function KolFilter({ excludedKols, onKolToggle, onClose }) {
     <div className="kol-filter-overlay">
       <div className="kol-filter-dropdown" ref={dropdownRef}>
         <div className="kol-filter-header">
-          <span>Select KOLs to Monitor</span>
+          <span>Smart Wallet Filter</span>
           <button 
             className="select-all-btn"
             onClick={() => {

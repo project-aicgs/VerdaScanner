@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { formatMarketCap } from "../utils/formatUtils";
+import { formatMarketCap, TOKEN_IMAGE_FALLBACK } from "../utils/formatUtils";
 import { getAllTokens, getStats } from "../utils/leaderboardStore";
 import "./Leaderboard.css";
+import ImageLightbox from "./ImageLightbox";
 
 export default function Leaderboard({ onClose }) {
-  const [sortConfig, setSortConfig] = useState({ key: 'peakMarketCap', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState({ key: 'gainPercent', direction: 'desc' });
   const [toast, setToast] = useState("");
+  const [zoomImage, setZoomImage] = useState(null);
   const [tokens, setTokens] = useState([]);
   const [stats, setStats] = useState({});
 
@@ -32,8 +34,14 @@ export default function Leaderboard({ onClose }) {
     return ((token.peakMarketCap - token.initialMarketCap) / token.initialMarketCap) * 100;
   };
 
+  const visibleTokens = tokens.filter((token) => {
+    const g = calculateGainPercent(token);
+    if (!Number.isFinite(g)) return false;
+    return true;
+  });
+
   // Sort tokens based on current sort config
-  const sortedTokens = [...tokens].sort((a, b) => {
+  const sortedTokens = [...visibleTokens].sort((a, b) => {
     let aValue, bValue;
 
     switch (sortConfig.key) {
@@ -130,17 +138,20 @@ export default function Leaderboard({ onClose }) {
   };
 
   return (
+    <>
     <div className="leaderboard-overlay" onClick={onClose}>
       {toast && (
-        <div className="toast">
+        <div className="lb-toast">
           {toast}
         </div>
       )}
       
       <div className="leaderboard-modal" onClick={(e) => e.stopPropagation()}>
         <div className="leaderboard-header">
-          <h2>🏆 Top 50 Gainers Leaderboard</h2>
-          <button className="close-btn" onClick={onClose}>✖</button>
+          <h2>Top 50 gainers</h2>
+          <button type="button" className="close-btn" onClick={onClose} aria-label="Close">
+            ×
+          </button>
         </div>
         
         <div className="leaderboard-stats">
@@ -149,15 +160,11 @@ export default function Leaderboard({ onClose }) {
             <span className="stat-value">{stats.totalTokens || 0}</span>
           </div>
           <div className="stat-item">
-            <span className="stat-label">Showing:</span>
-            <span className="stat-value">{tokens.length}</span>
-          </div>
-          <div className="stat-item">
             <span className="stat-label">Top Peak:</span>
             <span className="stat-value">{formatMarketCap(stats.topPeakMC || 0)}</span>
           </div>
           <div className="stat-item">
-            <span className="stat-label">KOL Tracker:</span>
+            <span className="stat-label">Smart wallets:</span>
             <span className="stat-value">{stats.bullXCount || 0}</span>
           </div>
           <div className="stat-item">
@@ -180,9 +187,9 @@ export default function Leaderboard({ onClose }) {
             <div 
               className={`sortable-header ${sortConfig.key === 'initialMarketCap' ? 'active' : ''}`}
               onClick={() => handleSort('initialMarketCap')}
-              title={`Sort by called at MC`}
+              title={`Sort by entry market cap`}
             >
-              Called At
+              Entry MC
               <span className="sort-icon">{getSortIcon('initialMarketCap')}</span>
             </div>
             <div 
@@ -204,12 +211,11 @@ export default function Leaderboard({ onClose }) {
             <div 
               className={`sortable-header ${sortConfig.key === 'calledAt' ? 'active' : ''}`}
               onClick={() => handleSort('calledAt')}
-              title={`Sort by time called`}
+              title={`Sort by time`}
             >
-              Called
+              Time
               <span className="sort-icon">{getSortIcon('calledAt')}</span>
             </div>
-            <div className="source-header">Source</div>
           </div>
           
           <div className="leaderboard-rows">
@@ -238,14 +244,31 @@ export default function Leaderboard({ onClose }) {
                       </div>
                     </div>
                     
-                    {token.image && (
-                      <img 
-                        src={token.image} 
-                        alt={token.symbol} 
+                    <button
+                      type="button"
+                      className="token-image-zoom-hit"
+                      aria-label={`Enlarge ${token.symbol || "token"} image`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setZoomImage({
+                          src: token.image || TOKEN_IMAGE_FALLBACK,
+                          alt: token.symbol || "Token",
+                        });
+                      }}
+                    >
+                      <img
+                        src={token.image || TOKEN_IMAGE_FALLBACK}
+                        alt=""
                         className="token-image-small"
-                        onError={(e) => e.target.style.display = 'none'}
+                        onError={(e) => {
+                          const el = e.currentTarget;
+                          el.onerror = null;
+                          if (el.dataset.fallbackApplied) return;
+                          el.dataset.fallbackApplied = "1";
+                          el.src = TOKEN_IMAGE_FALLBACK;
+                        }}
                       />
-                    )}
+                    </button>
                     <div className="token-details">
                       <div className="token-symbol">{token.symbol || '???'}</div>
                       <div className="token-name">{token.name || 'Unnamed'}</div>
@@ -273,10 +296,6 @@ export default function Leaderboard({ onClose }) {
                   <div className="time-ago">
                     {formatTimeAgo(token.calledAt)}
                   </div>
-                  
-                  <div className={`source ${token.source || 'unknown'}`}>
-                    {token.source === 'bullx' ? '🎯' : token.source === 'pumpfun' ? '🚀' : '❓'}
-                  </div>
                 </div>
               );
             })}
@@ -284,5 +303,13 @@ export default function Leaderboard({ onClose }) {
         </div>
       </div>
     </div>
+    {zoomImage && (
+      <ImageLightbox
+        src={zoomImage.src}
+        alt={zoomImage.alt}
+        onClose={() => setZoomImage(null)}
+      />
+    )}
+    </>
   );
 }

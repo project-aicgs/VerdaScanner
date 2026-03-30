@@ -1,6 +1,9 @@
 import { decode as msgpackDecode } from '@msgpack/msgpack';
 import pako from 'pako';
-import { addToken, updateMarketCap, getToken } from '../src/utils/leaderboardStore.js';
+import { addToken, updateMarketCap, getToken } from './utils/leaderboardStore.js';
+import { tokenContentAllowed } from './utils/contentFilter.js';
+import { KOL_NAMES } from './constants/kolWallets.js';
+import { recordWhaleActivity } from './utils/whaleActivityStore.js';
 
 // Two different WebSocket URLs
 const WALLET_WS_URL = 'wss://stream4.bullx.io/app/prowess-frail-sensitive?protocol=7&client=js&version=8.4.0-rc2&flash=false';
@@ -10,25 +13,27 @@ const TOKEN_WS_URL = 'wss://stream.bullx.io/app/prowess-frail-sensitive?protocol
 const SOLANA_NATIVE_TOKEN = "So11111111111111111111111111111111111111112";
 const CHAIN_ID = "1399811149";
 
-// KOL wallet addresses with corresponding names
-const KOL_NAMES = {
-  "GpaxwRPnFsygJaw1d9uf78Tzt7yDoZr5hBhfWEk7gyRT": "BATMANWIF",
-  "9CDiPtpPF2xB1VRsR13NeULzuU3X7xirfbqhZWmKcPqJ": "TEST ADDY",
-  "EnQLCLB7NWojruXXNopgH7jhkwoHihTpuzsrtsM2UCSe": "ERIK STEPHENS",
-  "AVAZvHLR2PcWpDf8BXY4rVxNHYRBytycHkcB5z5QNXYm": "ANSEM",
-  "vQ33AcEii7mciXznW7TAqzpv18Z77PQHxSfJ7xNBHwU": "MARCEL",
-  "3kebnKw7cPdSkLRfiMEALyZJGZ4wdiSRvmoN4rD1yPzV": "BASTILLE",
-  "8zFZHuSRuDpuAR7J6FzwyF3vKNx4CVW3DFHJerQhc7Zd": "TRADERPOW",
-  "4Be9CvxqHW6BYiRAxW9Q3xu1ycTMWaL5z8NX4HR3ha7t": "MITCH",
-  "B3wagQZiZU2hKa5pUCj6rrdhWsX3Q6WfTTnki9pJwzMh": "XANDER",
-  "4BukjaBiZgGaha6iniWDLiMRsLPCLxAyGMyjnkM3oPmR": "BIG DAN",
-  "CRVidEDtEUTYZisCxBZkpELzhQc9eauMLR3FWg74tReL": "FRANKDEGODS",
-  "Fdv3EQykFyxFpDf6SFB9TuaWdVFtmZeav3hrhrvQzZbM": "TOLY WALLET",
-  "6nhskL8RVpXzWXC7mcC1UXpe3ze2p6P6og1jXVGUW88s": "PATTY ICE",
-  "DfMxre4cKmvogbLrPigxmibVTTQDuzjdXojWzjCXXhzj": "EURIS",
-  "5rkPDK4JnVAumgzeV2Zu8vjggMTtHdDtrsd5o9dhGZHD": "DAVE PORTNOY",
-  "FXzJ6xwH2HfdKshERVAYiLh79PAUw9zC7ucngupt91ap": "DAVE PORTNOY",
-};
+function inferBlockWiseSwapSide(swapData, contractAddress) {
+  const sol = SOLANA_NATIVE_TOKEN;
+  const ti =
+    swapData.tokenIn ||
+    swapData.tokenInMint ||
+    swapData.inputMint ||
+    swapData.fromMint;
+  const to =
+    swapData.tokenOut ||
+    swapData.tokenOutMint ||
+    swapData.outputMint ||
+    swapData.toMint;
+  if (ti === contractAddress && (to === sol || to === SOLANA_NATIVE_TOKEN)) {
+    return "sell";
+  }
+  if ((ti === sol || ti === SOLANA_NATIVE_TOKEN) && to === contractAddress) {
+    return "buy";
+  }
+  if (swapData.txType === "sell" || swapData.side === "sell") return "sell";
+  return "buy";
+}
 
 // Track which channels we've already logged (to only show first-time data)
 const loggedChannels = new Set();
@@ -41,6 +46,73 @@ const tokenData = new Map();
 const transactionData = new Map();
 const kolTokensData = new Map();
 
+/** React subscribes for immediate UI/chart updates (polling alone was too slow vs Pump WS). */
+const kolTokensListeners = new Set();
+let kolNotifyTimeoutId = null;
+const KOL_NOTIFY_THROTTLE_MS = 120;
+
+/** One row per smart-wallet buy — sidebar feed (newest first). */
+const kolTxLog = [];
+const kolBuyEventsById = new Map();
+const kolLoggedEventIds = new Set();
+const kolTxListeners = new Set();
+let kolTxNotifyTimeoutId = null;
+const KOL_TX_NOTIFY_THROTTLE_MS = 120;
+
+function scheduleKolTokensNotify() {
+  if (kolTokensListeners.size === 0) return;
+  if (kolNotifyTimeoutId != null) return;
+  kolNotifyTimeoutId = window.setTimeout(() => {
+    kolNotifyTimeoutId = null;
+    const snapshot = Array.from(kolTokensData.values());
+    kolTokensListeners.forEach((fn) => {
+      try {
+        fn(snapshot);
+      } catch (e) {
+        console.error("[BullX] kolTokens listener error", e);
+      }
+    });
+  }, KOL_NOTIFY_THROTTLE_MS);
+}
+
+function scheduleKolTxNotify() {
+  if (kolTxListeners.size === 0) return;
+  if (kolTxNotifyTimeoutId != null) return;
+  kolTxNotifyTimeoutId = window.setTimeout(() => {
+    kolTxNotifyTimeoutId = null;
+    const snapshot = [...kolTxLog];
+    kolTxListeners.forEach((fn) => {
+      try {
+        fn(snapshot);
+      } catch (e) {
+        console.error("[BullX] kolTx listener error", e);
+      }
+    });
+  }, KOL_TX_NOTIFY_THROTTLE_MS);
+}
+
+/** @param {(tokens: object[]) => void} listener */
+export function subscribeKolTokens(listener) {
+  if (typeof listener !== "function") return () => {};
+  kolTokensListeners.add(listener);
+  return () => {
+    kolTokensListeners.delete(listener);
+  };
+}
+
+/** @param {(rows: object[]) => void} listener */
+export function subscribeKolTransactions(listener) {
+  if (typeof listener !== "function") return () => {};
+  kolTxListeners.add(listener);
+  return () => {
+    kolTxListeners.delete(listener);
+  };
+}
+
+export function getKolTransactions() {
+  return [...kolTxLog];
+}
+
 // WebSocket connections
 let walletWs = null;
 let tokenWs = null;
@@ -52,29 +124,6 @@ let tokenPingInterval = null;
 let healthCheckInterval = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
-
-// MARKET CAP VALIDATION - Enhanced with better limits
-const MAX_REALISTIC_MARKET_CAP = 10_000_000_000; // $10B max for new tokens
-const MIN_REALISTIC_MARKET_CAP = 1000; // $1K minimum
-
-function validateMarketCap(marketCap) {
-  if (!marketCap || isNaN(marketCap) || !isFinite(marketCap)) {
-    console.warn('Invalid market cap value:', marketCap);
-    return null;
-  }
-  
-  if (marketCap > MAX_REALISTIC_MARKET_CAP) {
-    console.warn(`Market cap ${marketCap} exceeds realistic maximum of $${MAX_REALISTIC_MARKET_CAP.toLocaleString()}`);
-    return null;
-  }
-  
-  if (marketCap < MIN_REALISTIC_MARKET_CAP) {
-    console.warn(`Market cap ${marketCap} below realistic minimum of $${MIN_REALISTIC_MARKET_CAP}`);
-    return null;
-  }
-  
-  return marketCap;
-}
 
 // Function to decode data (browser compatible)
 function decodeData(data) {
@@ -158,7 +207,7 @@ function calculateActualSupply(totalSupply, decimals) {
   const dec = parseInt(decimals);
   
   if (isNaN(supply) || isNaN(dec)) {
-    console.warn('Invalid supply or decimals:', { totalSupply, decimals });
+    // console.warn('Invalid supply or decimals:', { totalSupply, decimals });
     return null;
   }
   
@@ -173,7 +222,11 @@ function fixIpfsUrl(url) {
   return `https://ipfs.io/ipfs/${ipfsHash}`;
 }
 
-// FIXED: Function to display formatted analysis AND add to leaderboard store
+function isValidBuyMc(v) {
+  return v != null && Number.isFinite(v) && v > 0;
+}
+
+// Function to display formatted analysis AND add to leaderboard store
 function displayAnalysis(contractAddress) {
   const token = tokenData.get(contractAddress);
   const transaction = transactionData.get(contractAddress);
@@ -185,21 +238,10 @@ function displayAnalysis(contractAddress) {
   const actualSupply = calculateActualSupply(token.totalSupply, token.decimals);
   const priceUSD = transaction.suspectedBaseTokenPriceUSD;
   
-  // Calculate and validate market cap
+  // Calculate market cap
   let marketCap = null;
   if (actualSupply && priceUSD) {
-    const calculatedMC = actualSupply * parseFloat(priceUSD);
-    marketCap = validateMarketCap(calculatedMC);
-    
-    if (!marketCap) {
-      console.error(`Rejected invalid market cap for ${token.symbol}:`, {
-        actualSupply,
-        priceUSD,
-        calculatedMC,
-        decimals: token.decimals
-      });
-      return; // Don't add tokens with invalid market caps
-    }
+    marketCap = actualSupply * parseFloat(priceUSD);
   }
   
   const tokensPurchased = parseFloat(transaction.amountOut) / Math.pow(10, token.decimals);
@@ -207,6 +249,8 @@ function displayAnalysis(contractAddress) {
   const ownershipPercentage = actualSupply ? (tokensPurchased / actualSupply) * 100 : null;
 
   // Store formatted data for React components (KOL dashboard display)
+  // Note: do NOT put buyMarketCapUSD on kolTokenData — token_updates recalculates marketCap every tick
+  // and would reintroduce a drifting "buy" MC via Object.assign.
   const kolTokenData = {
     mint: contractAddress,
     name: token.name || "Unnamed",
@@ -230,36 +274,83 @@ function displayAnalysis(contractAddress) {
       existing.kols.push(kolTokenData.kols[0]);
     }
     Object.assign(existing, kolTokenData, { kols: existing.kols });
+    // Lock purchase MC once (first time we have a real figure). Never overwrite on later token_updates.
+    if (!isValidBuyMc(existing.buyMarketCapUSD) && isValidBuyMc(marketCap)) {
+      existing.buyMarketCapUSD = marketCap;
+    }
   } else {
-    kolTokensData.set(contractAddress, kolTokenData);
+    const row = { ...kolTokenData };
+    if (isValidBuyMc(marketCap)) {
+      row.buyMarketCapUSD = marketCap;
+    }
+    kolTokensData.set(contractAddress, row);
   }
 
-  console.log(`✅ BullX Token Analysis Complete:`, {
-    symbol: token.symbol,
-    marketCap: formatMarketCapSimple(marketCap),
-    priceUSD: priceUSD,
-    actualSupply: actualSupply,
-    decimals: token.decimals
-  });
+  const buyEventId = transaction._kolBuyEventId;
+  if (buyEventId && kolBuyEventsById.has(buyEventId) && !kolLoggedEventIds.has(buyEventId)) {
+    if (ownershipPercentage != null && Number.isFinite(ownershipPercentage) && ownershipPercentage >= 10) {
+      kolBuyEventsById.delete(buyEventId);
+    } else if (
+      isValidBuyMc(marketCap) &&
+      ownershipPercentage != null &&
+      Number.isFinite(ownershipPercentage)
+    ) {
+      kolLoggedEventIds.add(buyEventId);
+      const pending = kolBuyEventsById.get(buyEventId);
+      kolBuyEventsById.delete(buyEventId);
+      kolTxLog.unshift({
+        id: buyEventId,
+        mint: contractAddress,
+        kolName: transaction.kolName,
+        kolWallet: pending.kolWallet,
+        symbol: token.symbol || "???",
+        name: token.name || "Unnamed",
+        ownershipPercentage,
+        buyMarketCapUSD: marketCap,
+        usdSpent,
+        tokensPurchased,
+        ts: pending.ts,
+      });
+      if (kolTxLog.length > 500) kolTxLog.length = 500;
+      scheduleKolTxNotify();
+    }
+  }
+
+  scheduleKolTokensNotify();
+
+  // console.log(`✅ BullX Token Analysis Complete:`, {
+  //   symbol: token.symbol,
+  //   marketCap: formatMarketCapSimple(marketCap),
+  //   priceUSD: priceUSD,
+  //   actualSupply: actualSupply,
+  //   decimals: token.decimals
+  // });
   
   try {
     // Check if token already exists in store before adding
     const existingInStore = getToken(contractAddress);
     
     if (!existingInStore) {
+      const sym = token.symbol || "???";
+      const nm = token.name || "Unnamed";
+      if (!tokenContentAllowed(sym, nm)) {
+        // console.warn(`⛔ Skipping leaderboard add (content filter): ${sym}`);
+        return;
+      }
       addToken({
         contractAddress: contractAddress,
-        symbol: token.symbol || "???",
-        name: token.name || "Unnamed",
+        symbol: sym,
+        name: nm,
         image: token.logo,
         description: token.description || "",
         initialMarketCap: marketCap || 0,
         peakMarketCap: marketCap || 0,
         currentMarketCap: marketCap || 0,
+        volumeUSD: usdSpent || 0, // Include volume from transaction
         kols: [transaction.kolName || "UNKNOWN"]
       }, 'bullx');
       
-      console.log(`✅ Added BullX token to leaderboard: ${token.symbol}`);
+      // console.log(`✅ Added BullX token to leaderboard: ${token.symbol}`);
     } else {
       // Update existing token with new KOL if needed
       if (transaction.kolName && !existingInStore.kols.includes(transaction.kolName)) {
@@ -268,7 +359,7 @@ function displayAnalysis(contractAddress) {
     }
     
   } catch (error) {
-    console.error('❌ Error adding BullX token to leaderboard:', error);
+    // console.error('❌ Error adding BullX token to leaderboard:', error);
   }
 }
 
@@ -330,7 +421,7 @@ function createWebSocketConnections() {
 
   // WALLET WEBSOCKET
   walletWs.onopen = () => {
-    console.log('✅ BullX Wallet WebSocket connected');
+    // console.log('✅ BullX Wallet WebSocket connected');
     reconnectAttempts = 0;
     resubscribeWallets();
 
@@ -357,6 +448,20 @@ function createWebSocketConnections() {
             
             tx.kolName = kolName;
             tx.kolWallet = walletAddress;
+
+            const prev = transactionData.get(contractAddress);
+            if (prev && prev._kolBuyEventId) {
+              kolBuyEventsById.delete(prev._kolBuyEventId);
+            }
+            const eventId = `kol-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+            tx._kolBuyEventId = eventId;
+            kolBuyEventsById.set(eventId, {
+              mint: contractAddress,
+              kolName,
+              kolWallet: walletAddress,
+              ts: Date.now(),
+            });
+
             transactionData.set(contractAddress, tx);
             subscribeToToken(contractAddress);
             
@@ -370,7 +475,7 @@ function createWebSocketConnections() {
   };
 
   walletWs.onclose = (event) => {
-    console.warn('❌ BullX Wallet WebSocket disconnected');
+    // console.warn('❌ BullX Wallet WebSocket disconnected');
     if (isMonitoring && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
       reconnectAttempts++;
       setTimeout(() => {
@@ -385,7 +490,7 @@ function createWebSocketConnections() {
 
   // TOKEN WEBSOCKET
   tokenWs.onopen = () => {
-    console.log('✅ BullX Token WebSocket connected');
+    // console.log('✅ BullX Token WebSocket connected');
     resubscribeTokens();
 
     tokenPingInterval = setInterval(() => {
@@ -431,34 +536,41 @@ function createWebSocketConnections() {
         if (swapDataDecoded && swapDataDecoded.data && swapDataDecoded.data.length > 0) {
           const swapData = swapDataDecoded.data[0];
           const contractAddress = parsedData.event.split('_')[1];
-          
+
+          const swapVolUsd = Number(swapData.amountUSD) || 0;
+          if (swapVolUsd >= 500) {
+            const side = inferBlockWiseSwapSide(swapData, contractAddress);
+            recordWhaleActivity(contractAddress, {
+              side,
+              volumeUSD: swapVolUsd,
+              source: "dex",
+            });
+          }
+
           // Get live price from swap
           const livePriceUSD = swapData.suspectedBaseTokenPriceUSD;
           
           if (livePriceUSD && tokenData.has(contractAddress)) {
             const tokenInfo = tokenData.get(contractAddress);
-            
-            // FIXED: Check if token exists in leaderboard store first
-            const tokenInStore = getToken(contractAddress);
-            
-            if (tokenInfo && tokenInStore) {
-              const actualSupply = calculateActualSupply(tokenInfo.totalSupply, tokenInfo.decimals);
-              
-              if (actualSupply) {
-                const calculatedMC = actualSupply * parseFloat(livePriceUSD);
-                const validatedMC = validateMarketCap(calculatedMC);
-                
-                if (validatedMC) {
-                  // Only update if the new market cap is valid
-                  updateMarketCap(contractAddress, validatedMC);
-                  console.log(`📊 Updated ${tokenInfo.symbol} MC: ${formatMarketCapSimple(validatedMC)}`);
-                } else {
-                  console.warn(`🚨 Rejected live MC update for ${tokenInfo.symbol}:`, {
-                    livePriceUSD,
-                    actualSupply,
-                    calculatedMC
-                  });
-                }
+            const actualSupply = calculateActualSupply(
+              tokenInfo.totalSupply,
+              tokenInfo.decimals
+            );
+            const p = parseFloat(livePriceUSD);
+            if (actualSupply && Number.isFinite(p) && p > 0) {
+              const currentMarketCap = actualSupply * p;
+              const tokenInStore = getToken(contractAddress);
+              if (tokenInStore) {
+                const volumeUSD = swapData.amountUSD || 0;
+                updateMarketCap(contractAddress, currentMarketCap, volumeUSD);
+              }
+              // Keep Smart Wallet strip + modal chart in sync with swap stream (was leaderboard-only).
+              if (kolTokensData.has(contractAddress)) {
+                const kolRow = kolTokensData.get(contractAddress);
+                kolRow.marketCapUSD = currentMarketCap;
+                kolRow.priceUSD = p;
+                // buyMarketCapUSD unchanged — purchase snapshot for UI
+                scheduleKolTokensNotify();
               }
             }
           }
@@ -490,13 +602,12 @@ function createWebSocketConnections() {
               const priceUSD = transaction.suspectedBaseTokenPriceUSD || tokenDataDecoded.priceUSD;
               
               if (actualSupply && priceUSD) {
-                const calculatedMC = actualSupply * parseFloat(priceUSD);
-                const validatedMC = validateMarketCap(calculatedMC);
+                const currentMarketCap = actualSupply * parseFloat(priceUSD);
                 
-                // FIXED: Check if token exists before updating
+                // Check if token exists before updating
                 const tokenInStore = getToken(contractAddress);
-                if (validatedMC && tokenInStore) {
-                  updateMarketCap(contractAddress, validatedMC);
+                if (tokenInStore) {
+                  updateMarketCap(contractAddress, currentMarketCap, transaction.amountUSD || 0);
                 }
               }
             }
@@ -512,7 +623,7 @@ function createWebSocketConnections() {
   };
 
   tokenWs.onclose = (event) => {
-    console.warn('❌ BullX Token WebSocket disconnected');
+    // console.warn('❌ BullX Token WebSocket disconnected');
   };
 
   tokenWs.onerror = (err) => {
@@ -526,7 +637,7 @@ function createWebSocketConnections() {
       const tokenAlive = tokenWs && tokenWs.readyState === WebSocket.OPEN;
       
       if (!walletAlive || !tokenAlive) {
-        console.log('🔄 Reconnecting BullX WebSockets...');
+        // console.log('🔄 Reconnecting BullX WebSockets...');
         createWebSocketConnections();
       }
     }
@@ -538,7 +649,7 @@ function createWebSocketConnections() {
 export function startBullXMonitoring() {
   if (isMonitoring) return;
   
-  console.log('🚀 Starting BullX monitoring...');
+  // console.log('🚀 Starting BullX monitoring...');
   isMonitoring = true;
   reconnectAttempts = 0;
   createWebSocketConnections();
@@ -570,7 +681,7 @@ export function getConnectionHealth() {
 }
 
 export function stopBullXMonitoring() {
-  console.log('🛑 Stopping BullX monitoring...');
+  // console.log('🛑 Stopping BullX monitoring...');
   isMonitoring = false;
   reconnectAttempts = 0;
   
@@ -589,23 +700,19 @@ export function stopBullXMonitoring() {
 
 // DEBUG: Function to check BullX processing
 export function debugBullX() {
-  console.log('🔍 BullX Debug Info:', {
-    monitoring: isMonitoring,
-    walletConnected: walletWs?.readyState === WebSocket.OPEN,
-    tokenConnected: tokenWs?.readyState === WebSocket.OPEN,
-    subscribedTokens: subscribedTokens.size,
-    trackedKolTokens: kolTokensData.size,
-    tokenDataSize: tokenData.size,
-    transactionDataSize: transactionData.size
-  });
+  // console.log('🔍 BullX Debug Info:', {
+  //   monitoring: isMonitoring,
+  //   walletConnected: walletWs?.readyState === WebSocket.OPEN,
+  //   tokenConnected: tokenWs?.readyState === WebSocket.OPEN,
+  //   subscribedTokens: subscribedTokens.size,
+  //   trackedKolTokens: kolTokensData.size,
+  //   tokenDataSize: tokenData.size,
+  //   transactionDataSize: transactionData.size
+  // });
 
-  Array.from(kolTokensData.values()).slice(0, 3).forEach(token => {
-    console.log(`Token: ${token.symbol}`, {
-      marketCap: formatMarketCapSimple(token.marketCapUSD),
-      supply: token.supply,
-      price: token.priceUSD
-    });
-  });
+  // Array.from(kolTokensData.values()).slice(0, 3).forEach((token) => {
+  //   console.log(`Token: ${token.symbol}`, { ... });
+  // });
 }
 
 export { KOL_NAMES };

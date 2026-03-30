@@ -5,14 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Verda - KOL Trading Intelligence</title>
     <link rel="icon" href="/verdalogo.png" />
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Krub:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
-    <canvas id="bg"></canvas>
     <div id="intro-screen">
-      <h1 class="intro-title">Verda</h1>
-      <p class="intro-sub">KOL Trading Intelligence</p>
-      <button id="enter-site">Begin Trading Now</button>
+      <div class="intro-cursor-reveal" aria-hidden="true"></div>
+      <div class="intro-cursor-glow" aria-hidden="true"></div>
+      <div class="intro-content">
+        <h1 class="intro-title">Verda</h1>
+        <p class="intro-sub">The New Age of Token Scanning</p>
+        <button type="button" id="enter-site" class="intro-cta">Scan Now</button>
+      </div>
     </div>
     <div id="root" style="display: none;"></div>
     <script type="module" src="/src/main.jsx"></script>

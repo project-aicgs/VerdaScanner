@@ -1,14 +1,36 @@
-.toast {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background: #232946;
-    color: #fff;
-    padding: 12px 20px;
-    border-radius: 6px;
-    font-weight: bold;
-    z-index: 1000;
-    box-shadow: none;
-    border: 1.5px solid #a78bfa;
+/* Global toast — grey pill (Session Win Rate footer style) */
+
+@keyframes toast-flash-enter {
+  0% {
+    border-color: rgba(120, 230, 170, 0.85);
+    box-shadow: 0 0 0 2px rgba(90, 200, 130, 0.45), 0 8px 28px rgba(0, 0, 0, 0.45),
+      inset 0 0 12px rgba(80, 200, 120, 0.25);
+    background: linear-gradient(180deg, #4a6352 0%, #354a3c 45%, #2a382f 100%);
   }
-  
+  100% {
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    background: linear-gradient(180deg, #5c5f66 0%, #3d3f44 45%, #32343a 100%);
+  }
+}
+
+.toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10100;
+  padding: 0.55rem 1.25rem;
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: linear-gradient(180deg, #5c5f66 0%, #3d3f44 45%, #32343a 100%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  max-width: min(360px, calc(100vw - 2rem));
+  word-break: break-word;
+  animation: toast-flash-enter 0.75s ease-out;
+}

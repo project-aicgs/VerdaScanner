@@ -1,0 +1,32 @@
+# Build / functions — CoinGecko keys use server-only env (COINGECKO_*), never VITE_*.
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+# Optional: document env vars in Netlify project settings:
+# - VITE_COINGECKO_USE_NETLIFY_PROXY=true  (bundled — not secret; enables client to call /.netlify/functions/coingecko-proxy)
+# - COINGECKO_PRO_API_KEY                (secret — Pro onchain / charts)
+# - COINGECKO_DEMO_API_KEY               (optional secret — Demo /simple/price)
+#
+# Local dev: use Vite proxies + COINGECKO_* in .env (see vite.config.js). Do not set VITE_COINGECKO_USE_NETLIFY_PROXY locally unless using `netlify dev`.
+
+# Same-origin proxy for GeckoTerminal (browser → /gecko-terminal-api → API).
+# Avoids CORS when api.geckoterminal.com omits Access-Control-Allow-Origin.
+[[redirects]]
+  from = "/gecko-terminal-api/*"
+  to = "https://api.geckoterminal.com/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/__md-j7/*"
+  to = "https://metadata.j7tracker.com/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/__md-rapidlaunch/*"
+  to = "https://metadata.rapidlaunch.io/:splat"
+  status = 200
+  force = true
