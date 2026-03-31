@@ -1,45 +1,44 @@
-/**
- * Blocks token symbol/name when a listed term appears as a whole word only
- * (word boundaries), so substrings like "pass" / "class" are not flagged.
- */
-
 const BLOCKED_WORDS = [
-  "ASS",
   "SHIT",
   "FUCK",
-  "PUSSY",
+  "BITCH",
+  "CUNT",
+  "DYKE",
+  "KIKE",
+  "CHINK",
+  "NIGGER",
+  "NIGGA",
   "DICK",
+  "COCK",
+  "PENIS",
+  "VAGINA",
+  "PUSSY",
+  "PUSSIE",
   "CUM",
-  "BALLS",
+  "TITS",
+  "TITTY",
+  "TITTIE",
+  "ASSHOLE",
   "FAG",
   "FAGGOT",
-  "NIGGA",
-  "NIGGER",
-  "TIT",
-  "TITTY",
-  "TITS",
-  "BULLSHIT",
-  "TITTIE",
 ];
 
-function escapeRegex(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function normalizeForBlockedCheck(text) {
+  if (text == null || typeof text !== "string") return "";
+  return text.toUpperCase().replace(/[^A-Z0-9]+/g, "");
 }
 
-// Longer tokens first so alternation prefers e.g. FAGGOT over FAG when overlapping (defensive)
-const SORTED = [...BLOCKED_WORDS].sort((a, b) => b.length - a.length);
-
-const BLOCKED_WORD_PATTERN = new RegExp(
-  `\\b(?:${SORTED.map(escapeRegex).join("|")})\\b`,
-  "i"
+const NORMALIZED_BLOCKED_WORDS = BLOCKED_WORDS.map(normalizeForBlockedCheck).sort(
+  (a, b) => b.length - a.length
 );
 
 export function textContainsBlockedWord(text) {
-  if (text == null || typeof text !== "string") return false;
-  return BLOCKED_WORD_PATTERN.test(text);
+  const normalized = normalizeForBlockedCheck(text);
+  if (!normalized) return false;
+  return NORMALIZED_BLOCKED_WORDS.some((blocked) => normalized.includes(blocked));
 }
 
-/** True if both symbol and name are allowed (no blocked whole words). */
+/** True if both symbol and name are allowed after compact substring blocking. */
 export function tokenContentAllowed(symbol, name) {
   return (
     !textContainsBlockedWord(String(symbol ?? "")) &&
