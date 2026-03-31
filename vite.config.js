@@ -18,6 +18,12 @@ const metadataProxy = {
     secure: true,
     rewrite: (path) => path.replace(/^\/__md-j7/, ''),
   },
+  '/__md-j7-io': {
+    target: 'https://metadata.j7tracker.io',
+    changeOrigin: true,
+    secure: true,
+    rewrite: (path) => path.replace(/^\/__md-j7-io/, ''),
+  },
   '/__md-rapidlaunch': {
     target: 'https://metadata.rapidlaunch.io',
     changeOrigin: true,
@@ -29,6 +35,30 @@ const metadataProxy = {
     changeOrigin: true,
     secure: true,
     rewrite: (path) => path.replace(/^\/__md-drilled/, ''),
+  },
+  '/__md-launchblitz': {
+    target: 'https://ipfs.launchblitz.ai',
+    changeOrigin: true,
+    secure: true,
+    rewrite: (path) => path.replace(/^\/__md-launchblitz/, ''),
+  },
+  '/__md-kimjongnuked': {
+    target: 'https://kimjongnuked.com',
+    changeOrigin: true,
+    secure: true,
+    rewrite: (path) => path.replace(/^\/__md-kimjongnuked/, ''),
+  },
+  '/__md-extraction': {
+    target: 'https://ipfs2.extraction.live',
+    changeOrigin: true,
+    secure: true,
+    rewrite: (path) => path.replace(/^\/__md-extraction/, ''),
+  },
+  '/__md-asset-ip': {
+    target: 'http://13.222.185.152:4141',
+    changeOrigin: true,
+    secure: false,
+    rewrite: (path) => path.replace(/^\/__md-asset-ip/, ''),
   },
 }
 

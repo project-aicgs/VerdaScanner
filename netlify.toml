@@ -26,6 +26,12 @@
   force = true
 
 [[redirects]]
+  from = "/__md-j7-io/*"
+  to = "https://metadata.j7tracker.io/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/__md-rapidlaunch/*"
   to = "https://metadata.rapidlaunch.io/:splat"
   status = 200
@@ -34,5 +40,29 @@
 [[redirects]]
   from = "/__md-drilled/*"
   to = "https://drilled.live/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/__md-launchblitz/*"
+  to = "https://ipfs.launchblitz.ai/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/__md-kimjongnuked/*"
+  to = "https://kimjongnuked.com/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/__md-extraction/*"
+  to = "https://ipfs2.extraction.live/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/__md-asset-ip/*"
+  to = "http://13.222.185.152:4141/:splat"
   status = 200
   force = true

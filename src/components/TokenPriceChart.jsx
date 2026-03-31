@@ -58,6 +58,13 @@ function formatChartError(e) {
   }
 }
 
+function isAbortLikeError(err) {
+  if (!err) return false;
+  if (err?.name === "AbortError") return true;
+  const msg = formatChartError(err);
+  return msg.includes("aborted") || msg.includes("AbortError");
+}
+
 export default function TokenPriceChart({
   mint,
   livePriceUsd = null,
@@ -237,6 +244,23 @@ export default function TokenPriceChart({
               });
               if (cancelled || !seriesRef.current) return;
 
+              if (migrationWindow && (fresh.length === 0 || ohlcvBarsLookStale(fresh, CHART_AGGREGATE, staleOpts))) {
+                const newPool = await fetchBestPoolAddress(mint, {
+                  aggregate: CHART_AGGREGATE,
+                  limit: CHART_LIMIT,
+                  forceRefresh: true,
+                });
+                if (cancelled || !seriesRef.current) return;
+                if (newPool && newPool !== poolRef.current) {
+                  poolRef.current = newPool;
+                  fresh = await fetchMinuteOhlcv(poolRef.current, {
+                    aggregate: CHART_AGGREGATE,
+                    limit: CHART_LIMIT,
+                    forceRefresh: true,
+                  });
+                }
+              }
+
               if (
                 !migrationWindow &&
                 (fresh.length === 0 || ohlcvBarsLookStale(fresh, CHART_AGGREGATE, staleOpts))
@@ -278,6 +302,20 @@ export default function TokenPriceChart({
                 }
               }
             } catch (e) {
+              if (isAbortLikeError(e)) {
+                try {
+                  const fallbackPool = await fetchBestPoolAddress(mint, {
+                    aggregate: CHART_AGGREGATE,
+                    limit: CHART_LIMIT,
+                    forceRefresh: true,
+                  });
+                  if (!cancelled && seriesRef.current && fallbackPool) {
+                    poolRef.current = fallbackPool;
+                  }
+                } catch {
+                  /* ignore pool recovery failure */
+                }
+              }
               console.error("[VerdaChart] OHLCV poll failed", e);
             } finally {
               window.clearTimeout(watchdog);

@@ -15,8 +15,12 @@ import * as BullX from "../test-bullx-stream";
 import { ALL_KOL_NAMES } from "../constants/kolWallets.js";
 import { recordWhaleActivity } from "../utils/whaleActivityStore";
 import { registerPumpTokenTradeSubscriber } from "../utils/pumpWsBridge";
+import { proxyUrl } from "../utils/proxyUrl";
 
 const MAX_SUPPLY = 1_000_000_000;
+const METADATA_MISS = Symbol("metadata-miss");
+const metadataCache = new Map();
+const metadataInFlight = new Map();
 
 /** Merge Pump + BullX data so KOL sidebar opens the same TokenModal as Verda Scanner tiles. */
 function buildTokenForModalFromKolRow(row, pumpTokens, kolTokens) {
@@ -63,26 +67,6 @@ function normalizeIpfsUri(uri) {
   return s;
 }
 
-/** Route known metadata hosts through same-origin proxy (Vite + Netlify) to avoid CORS. */
-const METADATA_PROXY_PREFIX = {
-  "metadata.j7tracker.com": "/__md-j7",
-  "metadata.rapidlaunch.io": "/__md-rapidlaunch",
-  "drilled.live": "/__md-drilled",
-};
-
-function metadataFetchUrl(uri) {
-  const normalized = normalizeIpfsUri(uri);
-  if (!normalized?.startsWith("http")) return normalized;
-  try {
-    const u = new URL(normalized);
-    const prefix = METADATA_PROXY_PREFIX[u.hostname];
-    if (prefix) return `${prefix}${u.pathname}${u.search}`;
-  } catch {
-    /* ignore */
-  }
-  return normalized;
-}
-
 // Function to fix IPFS URLs (images, etc.)
 function fixIpfsUrl(url) {
   const u = normalizeIpfsUri(url);
@@ -90,6 +74,40 @@ function fixIpfsUrl(url) {
 
   const ipfsHash = u.split("ipfs/")[1];
   return `https://ipfs.io/ipfs/${ipfsHash}`;
+}
+
+async function fetchTokenMetadata(uri) {
+  const metadataUrl = proxyUrl(normalizeIpfsUri(uri));
+  if (!metadataUrl) return {};
+
+  const cached = metadataCache.get(metadataUrl);
+  if (cached) {
+    return cached === METADATA_MISS ? {} : cached;
+  }
+
+  const existing = metadataInFlight.get(metadataUrl);
+  if (existing) return existing;
+
+  const request = (async () => {
+    try {
+      const res = await fetch(metadataUrl);
+      if (!res.ok) {
+        metadataCache.set(metadataUrl, METADATA_MISS);
+        return {};
+      }
+      const json = await res.json();
+      metadataCache.set(metadataUrl, json);
+      return json;
+    } catch {
+      metadataCache.set(metadataUrl, METADATA_MISS);
+      return {};
+    } finally {
+      metadataInFlight.delete(metadataUrl);
+    }
+  })();
+
+  metadataInFlight.set(metadataUrl, request);
+  return request;
 }
 
 // Shared filter logic - EXTRACTED so both dashboard and leaderboard use the same logic
@@ -196,13 +214,7 @@ export default function Dashboard() {
 
     const ws = setupPumpWebSocket(
       async (token) => {
-        let metadata = {};
-        try {
-          const res = await fetch(metadataFetchUrl(token.uri));
-          if (res.ok) metadata = await res.json();
-        } catch {
-          /* missing metadata, CORS without proxy, or bad JSON */
-        }
+        const metadata = await fetchTokenMetadata(token.uri);
 
         const newToken = {
           mint: token.mint,
