@@ -531,93 +531,103 @@ export default function Dashboard() {
 
           <h2 className="section-label">Verda Scanner</h2>
       <div className="tile-container">
-        {filteredTokens.map(t => (
+        {filteredTokens.length === 0 ? (
           <div
-            className={`token-tile${flashMintTick[t.mint] ? " token-tile--flash-new" : ""}`}
-            key={t.mint}
-            onClick={() => openModal(t)}
+            className="token-tile token-tile--empty-state"
+            role="status"
+            aria-live="polite"
           >
-            <div 
-              className="copy-icon" 
-              onClick={(e) => handleCopyAddress(t.mint, e)}
-              title="Copy contract address"
-            >
-              <div className="copy-squares">
-                <div className="copy-square back"></div>
-                <div className="copy-square front"></div>
-              </div>
-            </div>
-            <button
-              type="button"
-              className="token-tile-media"
-              aria-label={`Enlarge ${t.symbol || "token"} image`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setZoomImage({
-                  src: t.image || TOKEN_IMAGE_FALLBACK,
-                  alt: t.symbol || "Token",
-                });
-              }}
-            >
-              <img
-                src={t.image || TOKEN_IMAGE_FALLBACK}
-                alt=""
-                className="token-image-hero"
-                onError={(e) => {
-                  const el = e.currentTarget;
-                  el.onerror = null;
-                  if (el.dataset.fallbackApplied) return;
-                  el.dataset.fallbackApplied = "1";
-                  el.src = TOKEN_IMAGE_FALLBACK;
-                }}
-              />
-            </button>
-            <div className="token-tile-head token-tile-head--stacked">
-              <div className="token-tile-titles">
-                <div className="symbol">{t.symbol}</div>
-                <div className="name">{t.name}</div>
-              </div>
-            </div>
-            <div className="socials">
-              {t.website && (
-                <a 
-                  href={t.website.startsWith('http') ? t.website : `https://${t.website}`} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="social-link"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  Website
-                </a>
-              )}
-              {t.twitter && (
-                <a 
-                  href={t.twitter.startsWith('http') ? t.twitter : `https://x.com/${t.twitter.replace('@', '')}`} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="social-link"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  X / Twitter
-                </a>
-              )}
-            </div>
-            <div className="token-tile-metrics">
-              <div className="token-metric token-metric--span">
-                <span className="token-metric-label">Dev holdings</span>
-                <span className="token-metric-value">{t.devPercent.toFixed(2)}%</span>
-              </div>
-              <div className="token-metric">
-                <span className="token-metric-label">Volume</span>
-                <span className="token-metric-value">{formatVolume(t.volumeUSD)}</span>
-              </div>
-              <div className="token-metric">
-                <span className="token-metric-label">Market cap</span>
-                <span className="token-metric-value">{formatMarketCap(t.marketCapUSD)}</span>
-              </div>
-            </div>
+            <div className="token-tile-empty-message">Awaiting new token mints...</div>
           </div>
-        ))}
+        ) : (
+          filteredTokens.map(t => (
+            <div
+              className={`token-tile${flashMintTick[t.mint] ? " token-tile--flash-new" : ""}`}
+              key={t.mint}
+              onClick={() => openModal(t)}
+            >
+              <div 
+                className="copy-icon" 
+                onClick={(e) => handleCopyAddress(t.mint, e)}
+                title="Copy contract address"
+              >
+                <div className="copy-squares">
+                  <div className="copy-square back"></div>
+                  <div className="copy-square front"></div>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="token-tile-media"
+                aria-label={`Enlarge ${t.symbol || "token"} image`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setZoomImage({
+                    src: t.image || TOKEN_IMAGE_FALLBACK,
+                    alt: t.symbol || "Token",
+                  });
+                }}
+              >
+                <img
+                  src={t.image || TOKEN_IMAGE_FALLBACK}
+                  alt=""
+                  className="token-image-hero"
+                  onError={(e) => {
+                    const el = e.currentTarget;
+                    el.onerror = null;
+                    if (el.dataset.fallbackApplied) return;
+                    el.dataset.fallbackApplied = "1";
+                    el.src = TOKEN_IMAGE_FALLBACK;
+                  }}
+                />
+              </button>
+              <div className="token-tile-head token-tile-head--stacked">
+                <div className="token-tile-titles">
+                  <div className="symbol">{t.symbol}</div>
+                  <div className="name">{t.name}</div>
+                </div>
+              </div>
+              <div className="socials">
+                {t.website && (
+                  <a 
+                    href={t.website.startsWith('http') ? t.website : `https://${t.website}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="social-link"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Website
+                  </a>
+                )}
+                {t.twitter && (
+                  <a 
+                    href={t.twitter.startsWith('http') ? t.twitter : `https://x.com/${t.twitter.replace('@', '')}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="social-link"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    X / Twitter
+                  </a>
+                )}
+              </div>
+              <div className="token-tile-metrics">
+                <div className="token-metric token-metric--span">
+                  <span className="token-metric-label">Dev holdings</span>
+                  <span className="token-metric-value">{t.devPercent.toFixed(2)}%</span>
+                </div>
+                <div className="token-metric">
+                  <span className="token-metric-label">Volume</span>
+                  <span className="token-metric-value">{formatVolume(t.volumeUSD)}</span>
+                </div>
+                <div className="token-metric">
+                  <span className="token-metric-label">Market cap</span>
+                  <span className="token-metric-value">{formatMarketCap(t.marketCapUSD)}</span>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
       </div>
         </div>
 
